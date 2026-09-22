@@ -1,0 +1,663 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KMCT IETM Report Generator</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- SheetJS for reading/writing Excel & CSV files -->
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.0/package/dist/xlsx.full.min.js"></script>
+    
+    <!-- FontAwesome for Icons -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f8fafc;
+        }
+        
+        /* Print Styles - crucial for hiding the app UI and showing only the report */
+        @media print {
+            body { 
+                background-color: white; 
+                margin: 0; 
+                padding: 0;
+            }
+            .no-print { display: none !important; }
+            .print-only { display: block !important; }
+            #print-container { 
+                width: 100%; 
+                margin: 0; 
+                padding: 0; 
+            }
+            .page-break { 
+                break-after: page; 
+                page-break-after: always; 
+            }
+            @page { 
+                margin: 1cm; 
+                size: A4 portrait; 
+            }
+        }
+        
+        .print-only { display: none; }
+
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #f1f1f1; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        
+        .college-header {
+            background-color: #1e3a8a; /* deep blue */
+            color: white;
+        }
+    </style>
+</head>
+<body class="h-screen flex overflow-hidden">
+
+    <aside class="w-72 bg-slate-900 text-white flex flex-col no-print hidden md:flex shrink-0">
+        <div class="p-6 flex flex-col gap-3 border-b border-slate-700">
+            <div class="flex items-center gap-3">
+                <i class="fa-solid fa-building-columns text-3xl text-blue-400"></i>
+                <h1 class="text-xl font-bold leading-tight">Report Generator<br><span class="text-sm font-medium text-slate-400">KMCT IETM</span></h1>
+            </div>
+        </div>
+        <nav class="flex-1 px-4 space-y-2 mt-6">
+            <a href="#" onclick="showSection('upload-section')" id="nav-upload" class="flex items-center gap-3 bg-blue-600 text-white px-4 py-3 rounded-lg transition-colors">
+                <i class="fa-solid fa-file-import w-5"></i>
+                <span class="font-medium">Data Import</span>
+            </a>
+            <a href="#" onclick="showSection('students-section')" id="nav-students" class="flex items-center gap-3 hover:bg-slate-800 text-slate-300 px-4 py-3 rounded-lg transition-colors">
+                <i class="fa-solid fa-user-graduate w-5"></i>
+                <span class="font-medium">Students List</span>
+            </a>
+        </nav>
+        <div class="p-4 text-xs text-slate-500 border-t border-slate-800 text-center">
+            <p>KMCT Institute of Emerging Technology and Management</p>
+        </div>
+    </aside>
+
+    <main class="flex-1 flex flex-col h-full relative overflow-y-auto custom-scrollbar no-print">
+        
+        <!-- Mobile Header -->
+        <header class="md:hidden bg-slate-900 text-white p-4 flex items-center justify-between no-print shadow-md shrink-0">
+            <div class="flex items-center gap-2">
+                <i class="fa-solid fa-building-columns text-xl text-blue-400"></i>
+                <h1 class="text-base font-bold">KMCT IETM</h1>
+            </div>
+            <button onclick="showSection('students-section')" class="text-sm bg-slate-800 px-3 py-1 rounded">List</button>
+        </header>
+
+        <div class="p-6 md:p-10 flex-1 max-w-6xl mx-auto w-full">
+            
+            <section id="upload-section" class="space-y-6 block animate-fade-in">
+                <div class="mb-8">
+                    <h2 class="text-3xl font-bold text-slate-800">Import Student Data</h2>
+                    <p class="text-slate-500 mt-2">Upload Marks and Attendance files. Supports <span class="font-semibold text-green-600">Excel (.xlsx)</span> and <span class="font-semibold text-blue-600">CSV (.csv)</span>.</p>
+                </div>
+
+                <!-- Report Settings -->
+                <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 mb-6">
+                    <h3 class="text-lg font-semibold text-slate-700 mb-4"><i class="fa-solid fa-school text-indigo-500 mr-2"></i> Report Settings</h3>
+                    <div class="grid md:grid-cols-2 gap-6">
+                        <div>
+                            <label for="inst-name" class="block text-sm font-medium text-slate-700 mb-2">College / Institution Name</label>
+                            <input type="text" id="inst-name" class="w-full border border-slate-300 rounded-xl px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all" value="KMCT Institute of Emerging Technology and Management" placeholder="Enter College Name">
+                        </div>
+                        <div>
+                            <label for="inst-tagline" class="block text-sm font-medium text-slate-700 mb-2">Location / Subtitle</label>
+                            <input type="text" id="inst-tagline" class="w-full border border-slate-300 rounded-xl px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all" value="KMCT IETM" placeholder="e.g., City, State">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="grid md:grid-cols-2 gap-6">
+                    <!-- Marks Upload -->
+                    <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+                        <div class="flex items-center justify-between mb-4">
+                            <h3 class="text-lg font-semibold text-slate-700"><i class="fa-solid fa-table-list text-blue-500 mr-2"></i> Marks Data</h3>
+                            <button onclick="downloadSample('marks')" class="text-sm text-blue-600 hover:text-blue-800 font-medium bg-blue-50 px-3 py-1 rounded-md transition-colors"><i class="fa-solid fa-download mr-1"></i> Template</button>
+                        </div>
+                        <div class="border-2 border-dashed border-slate-300 rounded-xl p-8 text-center hover:border-blue-500 transition-colors relative bg-slate-50 hover:bg-blue-50/30 group cursor-pointer">
+                            <input type="file" id="marks-file" accept=".csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer" onchange="handleFileSelect('marks-file', 'marks-status', 'marks-icon')">
+                            <i id="marks-icon" class="fa-solid fa-file-excel text-4xl text-slate-400 mb-3 group-hover:scale-110 transition-transform"></i>
+                            <p class="text-sm text-slate-600 font-medium">Click to upload Marks file</p>
+                            <p class="text-xs text-slate-400 mt-1">.xlsx, .xls, or .csv</p>
+                            <p id="marks-status" class="text-sm font-bold text-emerald-600 mt-3 hidden bg-emerald-50 py-1 px-3 rounded-full inline-block"><i class="fa-solid fa-check-circle mr-1"></i> File selected</p>
+                        </div>
+                    </div>
+
+                    <!-- Attendance Upload -->
+                    <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+                        <div class="flex items-center justify-between mb-4">
+                            <h3 class="text-lg font-semibold text-slate-700"><i class="fa-solid fa-clipboard-user text-green-500 mr-2"></i> Attendance Data</h3>
+                            <button onclick="downloadSample('attendance')" class="text-sm text-green-600 hover:text-green-800 font-medium bg-green-50 px-3 py-1 rounded-md transition-colors"><i class="fa-solid fa-download mr-1"></i> Template</button>
+                        </div>
+                        <div class="border-2 border-dashed border-slate-300 rounded-xl p-8 text-center hover:border-green-500 transition-colors relative bg-slate-50 hover:bg-green-50/30 group cursor-pointer">
+                            <input type="file" id="attendance-file" accept=".csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer" onchange="handleFileSelect('attendance-file', 'attendance-status', 'attendance-icon')">
+                            <i id="attendance-icon" class="fa-solid fa-file-excel text-4xl text-slate-400 mb-3 group-hover:scale-110 transition-transform"></i>
+                            <p class="text-sm text-slate-600 font-medium">Click to upload Attendance file</p>
+                            <p class="text-xs text-slate-400 mt-1">.xlsx, .xls, or .csv</p>
+                            <p id="attendance-status" class="text-sm font-bold text-emerald-600 mt-3 hidden bg-emerald-50 py-1 px-3 rounded-full inline-block"><i class="fa-solid fa-check-circle mr-1"></i> File selected</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mt-8 flex flex-col sm:flex-row items-center justify-between bg-white p-5 rounded-xl border border-slate-200 shadow-sm gap-4">
+                    <div class="text-sm text-slate-600 flex items-center bg-slate-50 p-3 rounded-lg w-full sm:w-auto">
+                        <i class="fa-solid fa-circle-info text-blue-500 mr-3 text-lg"></i> 
+                        <p>Ensure both files share a common <strong>"RollNumber"</strong> column.</p>
+                    </div>
+                    <button onclick="processData()" id="process-btn" class="w-full sm:w-auto bg-blue-700 hover:bg-blue-800 text-white px-8 py-3 rounded-xl font-bold shadow-md transition-all transform active:scale-95 flex items-center justify-center gap-2">
+                        <i class="fa-solid fa-gears"></i> Process Data
+                    </button>
+                </div>
+                
+                <!-- Error Message Box -->
+                <div id="error-box" class="hidden mt-4 bg-red-50 border border-red-200 text-red-700 px-4 py-4 rounded-xl flex items-start gap-3 shadow-sm">
+                    <i class="fa-solid fa-triangle-exclamation text-xl mt-0.5"></i>
+                    <div>
+                        <strong class="block font-bold">Processing Error</strong>
+                        <span id="error-message" class="text-sm"></span>
+                    </div>
+                </div>
+            </section>
+
+            <section id="students-section" class="hidden space-y-6 animate-fade-in">
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between mb-6 gap-4">
+                    <div>
+                        <h2 class="text-3xl font-bold text-slate-800">Students Dashboard</h2>
+                        <p class="text-slate-500 mt-1">Review processed data and generate reports.</p>
+                    </div>
+                    <div class="flex gap-3">
+                        <button onclick="showSection('upload-section')" class="bg-white border border-slate-300 text-slate-700 px-4 py-2 rounded-lg hover:bg-slate-50 transition-colors shadow-sm font-medium whitespace-nowrap">
+                            <i class="fa-solid fa-arrow-left mr-2"></i> Import New
+                        </button>
+                        <!-- NEW: Master Print Button -->
+                        <button onclick="printAllReports()" id="print-all-btn" class="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2 rounded-lg shadow-md font-semibold transition-colors flex items-center gap-2 whitespace-nowrap hidden">
+                            <i class="fa-solid fa-print"></i> Print All Reports
+                        </button>
+                    </div>
+                </div>
+
+                <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left border-collapse whitespace-nowrap">
+                            <thead>
+                                <tr class="bg-slate-100 text-slate-700 border-b border-slate-200 uppercase text-xs tracking-wider">
+                                    <th class="p-4 font-bold">Roll No.</th>
+                                    <th class="p-4 font-bold">Student Name</th>
+                                    <th class="p-4 font-bold text-center">Score</th>
+                                    <th class="p-4 font-bold text-center">Percentage</th>
+                                    <th class="p-4 font-bold text-center">Grade</th>
+                                    <th class="p-4 font-bold text-center">Attendance</th>
+                                    <th class="p-4 font-bold text-right">Action</th>
+                                </tr>
+                            </thead>
+                            <tbody id="student-table-body" class="divide-y divide-slate-100 text-sm">
+                                <!-- Student rows injected here via JS -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+        </div>
+    </main>
+
+    <div id="report-modal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 hidden no-print flex items-center justify-center p-4 sm:p-8">
+        <div class="bg-slate-100 rounded-2xl shadow-2xl w-full max-w-4xl max-h-full overflow-hidden flex flex-col border border-slate-300">
+            
+            <div class="bg-white px-6 py-4 border-b border-slate-200 flex justify-between items-center shrink-0">
+                <div class="flex items-center gap-3">
+                    <i class="fa-solid fa-file-contract text-blue-600 text-xl"></i>
+                    <h3 class="font-bold text-slate-800 text-lg">Report Card Preview</h3>
+                </div>
+                <div class="space-x-2 flex">
+                    <button onclick="window.print()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2 rounded-lg text-sm font-semibold transition-colors flex items-center shadow-sm">
+                        <i class="fa-solid fa-print mr-2"></i> Print Single PDF
+                    </button>
+                    <button onclick="closeReportCard()" class="bg-slate-200 hover:bg-slate-300 text-slate-700 px-5 py-2 rounded-lg text-sm font-semibold transition-colors">
+                        Close
+                    </button>
+                </div>
+            </div>
+            
+            <div class="p-4 sm:p-8 overflow-y-auto flex-1 custom-scrollbar flex justify-center bg-slate-100">
+                <div id="report-card-render" class="bg-white p-8 sm:p-12 w-full max-w-3xl shadow-lg border border-slate-200 relative">
+                    <!-- Single Report Card HTML injected here -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Container for exactly what prints. Applies both for single and bulk prints -->
+    <div id="print-container" class="print-only"></div>
+
+    <script>
+        // State variables
+        let rawMarks = [];
+        let rawAttendance = [];
+        let mergedData = [];
+        let subjects = [];
+
+        // File Input UI Handler
+        function handleFileSelect(inputId, statusId, iconId) {
+            const fileInput = document.getElementById(inputId);
+            const statusEl = document.getElementById(statusId);
+            const iconEl = document.getElementById(iconId);
+            
+            if (fileInput.files.length > 0) {
+                const fileName = fileInput.files[0].name;
+                statusEl.classList.remove('hidden');
+                statusEl.innerHTML = `<i class="fa-solid fa-check-circle mr-1"></i> ${fileName}`;
+                
+                if (fileName.toLowerCase().endsWith('.csv')) {
+                    iconEl.className = 'fa-solid fa-file-csv text-4xl text-blue-500 mb-3 group-hover:scale-110 transition-transform';
+                } else {
+                    iconEl.className = 'fa-solid fa-file-excel text-4xl text-green-500 mb-3 group-hover:scale-110 transition-transform';
+                }
+            } else {
+                statusEl.classList.add('hidden');
+                iconEl.className = 'fa-solid fa-file-excel text-4xl text-slate-400 mb-3 group-hover:scale-110 transition-transform';
+            }
+        }
+
+        function showError(msg) {
+            const errorBox = document.getElementById('error-box');
+            const errorMsg = document.getElementById('error-message');
+            errorMsg.innerText = msg;
+            errorBox.classList.remove('hidden');
+            setTimeout(() => { errorBox.classList.add('hidden'); }, 6000);
+        }
+
+        // Promise-based file reader using SheetJS
+        function readSpreadsheetFile(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    try {
+                        const data = new Uint8Array(e.target.result);
+                        const workbook = XLSX.read(data, {type: 'array'});
+                        const firstSheetName = workbook.SheetNames[0];
+                        const worksheet = workbook.Sheets[firstSheetName];
+                        const json = XLSX.utils.sheet_to_json(worksheet, { defval: "" });
+                        resolve(json);
+                    } catch (err) {
+                        reject(err);
+                    }
+                };
+                reader.onerror = (error) => reject(error);
+                reader.readAsArrayBuffer(file);
+            });
+        }
+
+        async function processData() {
+            const marksFile = document.getElementById('marks-file').files[0];
+            const attendanceFile = document.getElementById('attendance-file').files[0];
+            const btn = document.getElementById('process-btn');
+
+            if (!marksFile || !attendanceFile) {
+                showError("Please upload both Marks and Attendance files (Excel or CSV).");
+                return;
+            }
+
+            try {
+                btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Processing...';
+                btn.disabled = true;
+
+                const [marksData, attData] = await Promise.all([
+                    readSpreadsheetFile(marksFile),
+                    readSpreadsheetFile(attendanceFile)
+                ]);
+
+                rawMarks = marksData;
+                rawAttendance = attData;
+                mergeAndRender();
+
+            } catch (error) {
+                console.error(error);
+                showError("Failed to parse the files. Please ensure they are valid Excel or CSV files.");
+            } finally {
+                btn.innerHTML = '<i class="fa-solid fa-gears"></i> Process Data';
+                btn.disabled = false;
+            }
+        }
+
+        // Helper to find column keys robustly
+        function getCommonKey(obj, possibleKeys) {
+            const lowerKeys = Object.keys(obj).reduce((acc, key) => {
+                acc[key.toLowerCase().replace(/\s+/g, '')] = key;
+                return acc;
+            }, {});
+
+            for (let key of possibleKeys) {
+                const searchKey = key.toLowerCase().replace(/\s+/g, '');
+                if (lowerKeys[searchKey]) return obj[lowerKeys[searchKey]];
+            }
+            return null;
+        }
+
+        function mergeAndRender() {
+            mergedData = [];
+            subjects = [];
+            
+            if(rawMarks.length === 0) return showError("Marks file appears to be empty.");
+
+            const excludeKeys = ['rollnumber', 'rollno', 'name', 'studentname', 'id', 'slno'];
+            const firstMark = rawMarks[0];
+            
+            // Extract Subjects automatically based on column names
+            subjects = Object.keys(firstMark).filter(header => {
+                return !excludeKeys.includes(header.toLowerCase().replace(/\s+/g, ''));
+            });
+
+            if (subjects.length === 0) return showError("No subject columns found in Marks file.");
+
+            rawMarks.forEach(studentMark => {
+                const rollNo = getCommonKey(studentMark, ['RollNumber', 'RollNo', 'ID']) || 'Unknown';
+                const name = getCommonKey(studentMark, ['Name', 'StudentName']) || 'Unknown';
+
+                const studentAtt = rawAttendance.find(a => {
+                    const attRoll = getCommonKey(a, ['RollNumber', 'RollNo', 'ID']);
+                    return String(attRoll) === String(rollNo);
+                });
+
+                let totalMarks = 0;
+                let maxTotal = subjects.length * 100;
+                
+                subjects.forEach(sub => {
+                    let mark = Number(studentMark[sub]);
+                    totalMarks += (isNaN(mark) ? 0 : mark);
+                });
+
+                const percentage = maxTotal > 0 ? ((totalMarks / maxTotal) * 100).toFixed(2) : 0;
+                
+                let grade = 'F';
+                if(percentage >= 90) grade = 'S';
+                else if(percentage >= 80) grade = 'A';
+                else if(percentage >= 70) grade = 'B';
+                else if(percentage >= 60) grade = 'C';
+                else if(percentage >= 50) grade = 'D';
+                else if(percentage >= 40) grade = 'E';
+
+                mergedData.push({
+                    rollNumber: rollNo,
+                    name: name,
+                    marks: studentMark,
+                    attendance: studentAtt || { TotalDays: 0, PresentDays: 0 },
+                    totalMarks: totalMarks,
+                    maxTotal: maxTotal,
+                    percentage: percentage,
+                    grade: grade
+                });
+            });
+
+            renderStudentTable();
+            showSection('students-section');
+            
+            // Show master print button if data exists
+            if(mergedData.length > 0) {
+                document.getElementById('print-all-btn').classList.remove('hidden');
+            }
+        }
+
+        function renderStudentTable() {
+            const tbody = document.getElementById('student-table-body');
+            tbody.innerHTML = '';
+
+            mergedData.forEach((student, index) => {
+                const tDays = Number(getCommonKey(student.attendance, ['TotalDays', 'TotalWorkingDays', 'WorkingDays'])) || 0;
+                const pDays = Number(getCommonKey(student.attendance, ['PresentDays', 'DaysPresent', 'Attended'])) || 0;
+                const attPercent = tDays > 0 ? Math.round((pDays / tDays) * 100) : 0;
+                
+                let attColor = attPercent >= 75 ? 'text-emerald-600' : 'text-red-600';
+
+                const tr = document.createElement('tr');
+                tr.className = 'hover:bg-blue-50 transition-colors group cursor-default';
+                
+                tr.innerHTML = `
+                    <td class="p-4 text-slate-800 font-bold">${student.rollNumber}</td>
+                    <td class="p-4 text-slate-700 font-medium">${student.name}</td>
+                    <td class="p-4 text-slate-600 text-center font-medium">${student.totalMarks} <span class="text-xs text-slate-400">/ ${student.maxTotal}</span></td>
+                    <td class="p-4 text-slate-600 text-center font-bold">${student.percentage}%</td>
+                    <td class="p-4 text-center font-black text-lg ${getGradeColor(student.grade)}">${student.grade}</td>
+                    <td class="p-4 text-center font-medium ${attColor}">${attPercent}%</td>
+                    <td class="p-4 text-right">
+                        <button onclick="previewReport(${index})" class="text-blue-700 bg-blue-100 hover:bg-blue-600 hover:text-white font-semibold text-xs px-4 py-2 rounded-lg transition-all shadow-sm">
+                            <i class="fa-solid fa-file-invoice mr-1"></i> Preview
+                        </button>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        function getGradeColor(grade) {
+            if(['S','A'].includes(grade)) return 'text-emerald-500';
+            if(['B','C'].includes(grade)) return 'text-blue-500';
+            if(['D','E'].includes(grade)) return 'text-orange-500';
+            return 'text-red-600';
+        }
+
+        function showSection(sectionId) {
+            document.getElementById('upload-section').classList.add('hidden');
+            document.getElementById('students-section').classList.add('hidden');
+            document.getElementById(sectionId).classList.remove('hidden');
+            
+            document.getElementById('nav-upload').className = sectionId === 'upload-section' 
+                ? "flex items-center gap-3 bg-blue-600 text-white px-4 py-3 rounded-lg transition-colors"
+                : "flex items-center gap-3 hover:bg-slate-800 text-slate-300 px-4 py-3 rounded-lg transition-colors";
+            
+            document.getElementById('nav-students').className = sectionId === 'students-section' 
+                ? "flex items-center gap-3 bg-blue-600 text-white px-4 py-3 rounded-lg transition-colors"
+                : "flex items-center gap-3 hover:bg-slate-800 text-slate-300 px-4 py-3 rounded-lg transition-colors";
+        }
+
+        function getReportHTML(student) {
+            const instName = document.getElementById('inst-name').value || 'KMCT Institute of Emerging Technology and Management';
+            const instTagline = document.getElementById('inst-tagline').value || 'KMCT IETM';
+            
+            let subjectsHTML = '';
+            subjects.forEach((sub, i) => {
+                const mark = student.marks[sub] || 0;
+                subjectsHTML += `
+                    <tr>
+                        <td class="border-b border-r border-slate-300 px-5 py-3 text-slate-800 font-medium">${sub}</td>
+                        <td class="border-b border-r border-slate-300 px-5 py-3 text-center text-slate-600">100</td>
+                        <td class="border-b border-slate-300 px-5 py-3 text-center text-slate-900 font-bold">${mark}</td>
+                    </tr>
+                `;
+            });
+
+            const tDays = Number(getCommonKey(student.attendance, ['TotalDays', 'TotalWorkingDays', 'WorkingDays'])) || 0;
+            const pDays = Number(getCommonKey(student.attendance, ['PresentDays', 'DaysPresent', 'Attended'])) || 0;
+            const attPercent = tDays > 0 ? Math.round((pDays / tDays) * 100) : 0;
+            const isDefaulter = attPercent < 75;
+
+            return `
+                <div class="bg-white p-8 sm:p-12 w-full max-w-3xl shadow-lg border border-slate-200 relative mx-auto h-full box-border">
+                    <!-- College Header -->
+                    <div class="text-center college-header py-6 px-4 rounded-t-xl mb-6 relative overflow-hidden shadow-sm">
+                        <i class="fa-solid fa-graduation-cap absolute -right-6 -top-6 text-9xl text-white opacity-10"></i>
+                        <h1 class="text-xl sm:text-2xl font-black uppercase tracking-wider mb-1 drop-shadow-md px-2">${instName}</h1>
+                        <p class="text-blue-100 font-medium text-sm sm:text-base tracking-widest uppercase mb-1">${instTagline}</p>
+                        <div class="mt-5 inline-block bg-white text-blue-900 font-bold px-6 py-2 rounded-full text-sm shadow-md uppercase tracking-wide border border-blue-200">
+                            Student Progress Report
+                        </div>
+                    </div>
+
+                    <!-- Department & Student Info -->
+                    <div class="mb-8">
+                        <h2 class="text-center text-lg font-bold text-slate-700 uppercase tracking-widest mb-6 border-b-2 border-slate-200 pb-2">Academic Record</h2>
+                        <div class="grid grid-cols-2 gap-4 bg-slate-50 p-5 rounded-xl border border-slate-200 shadow-sm">
+                            <div class="space-y-3">
+                                <p class="flex flex-col"><span class="text-xs font-bold text-slate-400 uppercase tracking-wider">Student Name</span> <span class="text-lg font-bold text-slate-800">${student.name}</span></p>
+                                <p class="flex flex-col"><span class="text-xs font-bold text-slate-400 uppercase tracking-wider">Roll Number / Reg No.</span> <span class="text-md font-semibold text-slate-700">${student.rollNumber}</span></p>
+                            </div>
+                            <div class="space-y-3 text-right">
+                                <p class="flex flex-col"><span class="text-xs font-bold text-slate-400 uppercase tracking-wider">Semester</span> <span class="text-md font-semibold text-slate-700">Current Semester</span></p>
+                                <p class="flex flex-col"><span class="text-xs font-bold text-slate-400 uppercase tracking-wider">Date of Issue</span> <span class="text-md font-semibold text-slate-700">${new Date().toLocaleDateString('en-IN')}</span></p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Marks Table -->
+                    <div class="mb-8 relative z-10">
+                        <h3 class="text-sm font-bold uppercase tracking-wider mb-3 text-slate-700 flex items-center"><i class="fa-solid fa-square-poll-vertical text-blue-600 mr-2"></i> Academic Performance</h3>
+                        <div class="rounded-lg overflow-hidden border border-slate-300 shadow-sm">
+                            <table class="w-full border-collapse bg-white">
+                                <thead>
+                                    <tr class="bg-slate-100 border-b border-slate-300">
+                                        <th class="border-r border-slate-300 px-5 py-3 text-left text-xs font-bold text-slate-600 uppercase w-1/2">Subject Name</th>
+                                        <th class="border-r border-slate-300 px-5 py-3 text-center text-xs font-bold text-slate-600 uppercase w-1/4">Max Marks</th>
+                                        <th class="px-5 py-3 text-center text-xs font-bold text-slate-600 uppercase w-1/4">Marks Secured</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${subjectsHTML}
+                                </tbody>
+                                <tfoot class="bg-slate-50 border-t-2 border-slate-400">
+                                    <tr>
+                                        <td class="border-r border-slate-300 px-5 py-4 text-right font-black uppercase text-sm text-slate-700">Grand Total</td>
+                                        <td class="border-r border-slate-300 px-5 py-4 text-center font-bold text-slate-700">${student.maxTotal}</td>
+                                        <td class="px-5 py-4 text-center font-black text-lg text-blue-700">${student.totalMarks}</td>
+                                    </tr>
+                                </tfoot>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- Summary & Attendance -->
+                    <div class="grid grid-cols-2 gap-6 mb-8">
+                        <div class="bg-white p-5 border border-slate-200 rounded-xl shadow-sm relative overflow-hidden">
+                            <div class="absolute -right-4 -bottom-4 opacity-5">
+                                <i class="fa-solid fa-award text-9xl"></i>
+                            </div>
+                            <h3 class="text-xs font-bold uppercase tracking-wider mb-4 text-slate-500">Overall Assessment</h3>
+                            <div class="space-y-4">
+                                <div class="flex justify-between items-end border-b border-slate-100 pb-2">
+                                    <span class="font-semibold text-slate-600">Total Percentage</span>
+                                    <span class="font-black text-2xl text-slate-800">${student.percentage}%</span>
+                                </div>
+                                <div class="flex justify-between items-end">
+                                    <span class="font-semibold text-slate-600">Final Grade</span>
+                                    <span class="font-black text-3xl ${getGradeColor(student.grade)}">${student.grade}</span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="bg-white p-5 border border-slate-200 rounded-xl shadow-sm">
+                            <h3 class="text-xs font-bold uppercase tracking-wider mb-4 text-slate-500">Attendance Record</h3>
+                            <div class="space-y-2 mb-3">
+                                <div class="flex justify-between text-sm">
+                                    <span class="text-slate-600 font-medium">Total Working Days</span>
+                                    <span class="font-bold text-slate-800">${tDays}</span>
+                                </div>
+                                <div class="flex justify-between text-sm">
+                                    <span class="text-slate-600 font-medium">Days Present</span>
+                                    <span class="font-bold text-slate-800">${pDays}</span>
+                                </div>
+                            </div>
+                            
+                            <div class="w-full bg-slate-100 rounded-full h-3 mt-4 border border-slate-200 overflow-hidden">
+                                <div class="${isDefaulter ? 'bg-red-500' : 'bg-emerald-500'} h-full rounded-full transition-all" style="width: ${Math.min(attPercent, 100)}%"></div>
+                            </div>
+                            <div class="flex justify-between mt-2">
+                                <p class="text-xs font-bold ${isDefaulter ? 'text-red-500' : 'text-emerald-600'}">${attPercent}% Present</p>
+                                ${isDefaulter ? '<span class="text-xs font-bold text-red-500 bg-red-50 px-2 py-0.5 rounded">Shortage</span>' : ''}
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Signatures -->
+                    <div class="flex justify-between items-end mt-12 pt-8 border-t border-slate-200 px-4">
+                        <div class="text-center">
+                            <div class="w-48 border-b-2 border-slate-400 mb-2 border-dashed"></div>
+                            <p class="font-bold text-slate-700 text-sm">Tutor Signature</p>
+                        </div>
+                        <div class="text-center">
+                            <div class="w-48 border-b-2 border-slate-400 mb-2 border-dashed"></div>
+                            <p class="font-bold text-slate-700 text-sm">Head of Department</p>
+                        </div>
+                        <div class="text-center">
+                            <div class="w-48 border-b-2 border-slate-400 mb-2 border-dashed"></div>
+                            <p class="font-bold text-slate-700 text-sm">Principal</p>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        // Preview Single Report inside Modal
+        function previewReport(studentIndex) {
+            const student = mergedData[studentIndex];
+            const html = getReportHTML(student);
+            
+            document.getElementById('report-card-render').innerHTML = html;
+            document.getElementById('print-container').innerHTML = html;
+            
+            document.getElementById('report-modal').classList.remove('hidden');
+        }
+
+        // MASTER PRINT: Generate all reports with page breaks
+        function printAllReports() {
+            if (mergedData.length === 0) return;
+            
+            let allReportsHTML = '';
+            
+            mergedData.forEach((student, index) => {
+                allReportsHTML += getReportHTML(student);
+                // Add page break after every report except the last one
+                if (index < mergedData.length - 1) {
+                    allReportsHTML += '<div class="page-break"></div>';
+                }
+            });
+            
+            // Set it to the print container
+            document.getElementById('print-container').innerHTML = allReportsHTML;
+            
+            // Trigger native print
+            window.print();
+        }
+
+        function closeReportCard() {
+            document.getElementById('report-modal').classList.add('hidden');
+        }
+
+        function downloadSample(type) {
+            const wb = XLSX.utils.book_new();
+            let data = [];
+            let fileName = "";
+            
+            if (type === 'marks') {
+                data = [
+                    { RollNumber: "CS001", Name: "Aditya Mohan", ProgrammingInC: 85, DigitalElectronics: 92, Mathematics: 78 },
+                    { RollNumber: "CS002", Name: "Kavya S", ProgrammingInC: 95, DigitalElectronics: 88, Mathematics: 91 },
+                    { RollNumber: "CS003", Name: "Rahul Nair", ProgrammingInC: 60, DigitalElectronics: 75, Mathematics: 65 }
+                ];
+                fileName = "KMCT_IETM_Sample_Marks.xlsx";
+            } else {
+                data = [
+                    { RollNumber: "CS001", TotalDays: 90, PresentDays: 85 },
+                    { RollNumber: "CS002", TotalDays: 90, PresentDays: 88 },
+                    { RollNumber: "CS003", TotalDays: 90, PresentDays: 60 }
+                ];
+                fileName = "KMCT_IETM_Sample_Attendance.xlsx";
+            }
+
+            const ws = XLSX.utils.json_to_sheet(data);
+            const wscols = Object.keys(data[0]).map(w => ({ wch: Math.max(w.length, 12) }));
+            ws['!cols'] = wscols;
+
+            XLSX.utils.book_append_sheet(wb, ws, "Sheet1");
+            XLSX.writeFile(wb, fileName);
+        }
+    </script>
+</body>
+</html>
